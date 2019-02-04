@@ -1,0 +1,91 @@
+---
+title: "California Housing"
+author: "Team Algoritma"
+date: "10/17/2018"
+output: html_document
+---
+
+# Exploration on California House Pricing
+
+```{r}
+california <- read.csv('data_input/california_housing.csv')
+head(california)
+```
+
+```{r}
+range(california$median_house_value)
+```
+
+
+```{r}
+library(dplyr)
+library(leaflet.extras)
+
+norm <- function(x){
+  return((max(x)-x)/(max(x)-min(x)))
+}
+
+# Sample because too huge
+california <- california[sample(nrow(california),1000),] %>%
+  mutate(median_house_value.log = log(median_house_value)) %>%
+  mutate(median_house_value.n = norm(median_house_value))
+str(california)
+
+
+# Hard code large city
+cities <- data.frame(city = c("Los Angeles", "San Fransisco", "San Diego", "Sacramento", "San Jose", "Redding"),
+                     lat = c(34.052235,37.774929,32.715736,38.581573,37.338207,40.586540),
+                     lng = c(-118.243683,-122.419418,-117.161087,-121.494400,-121.886330,-122.391678))
+
+# Calculate distance to assign houses to 6 large city
+source("helpers/distance.R")
+california$cities <- distance(california[,1:2], cities[,c(3,2)], cities)
+california$cities <- sapply(as.character(california$cities), switch,
+                            "1" = "Los Angeles",
+                            "2" = "San Fransisco",
+                            "3" = "San Diego",
+                            "4" = "Sacramento",
+                            "5" = "San Jose",
+                            "6" = "Redding")
+
+cities$avg.price <- california %>%
+  group_by(cities) %>%
+  summarise(Price = mean(median_house_value.n)) %>%
+  mutate(Price = exp(max(california$median_house_value.log) + Price*(min(california$median_house_value.log) - max(california$median_house_value.log)))) %>%
+  select(Price) %>%
+  unlist()
+
+leaflet(california) %>%
+  addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  addHeatmap(lng = ~longitude, lat = ~latitude,
+             intensity = ~median_house_value.n,
+             radius = 20,
+             blur=40) %>%
+  addMarkers(data=cities, lng = ~lng, lat = ~lat,
+             popup = paste(cities$city, 
+                           "<strong>Average Price (USD)</strong>",
+                           round(cities$avg.price,2) ,sep = "<br>"))
+```
+
+```{r}
+head(california)
+```
+
+```{r}
+head(cities)
+```
+
+
+```{r}
+leaflet() %>%
+  addProviderTiles(providers$CartoDB.DarkMatter) %>%
+  addHeatmap(lng = california$longitude, lat = california$latitude,
+             intensity = california$median_house_value.n,
+             radius = 20,
+             blur=40) %>%
+  addMarkers(data=cities, lng = ~lng, lat = ~lat,
+             popup = paste(cities$city, 
+                           "<strong>Average Price (USD)</strong>",
+                           round(cities$avg.price,2) ,sep = "<br>"))
+```
+
